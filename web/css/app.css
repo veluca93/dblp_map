@@ -1,0 +1,23 @@
+.scrollable {
+    height: auto;
+    max-height: 500px;
+    overflow-x: hidden;
+}
+
+.scrollable:hover {
+    cursor: pointer;
+}
+
+.fit {
+    width: 100%;
+}
+
+.lowpad {
+    padding-left: 1px;
+    padding-right: 2px;
+}
+
+.spinner {
+    height: 30px;
+    width: 30px;
+}
