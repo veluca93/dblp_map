@@ -12,6 +12,7 @@ import urllib2
 import urllib
 import json
 import time
+import importlib
 from collections import deque
 from gevent import socket
 from werkzeug.utils import redirect
@@ -22,11 +23,16 @@ from werkzeug.exceptions import HTTPException, NotFound, BadRequest, \
 from werkzeug.wrappers import Response
 
 class DBLPHandler(object):
-    def __init__(self, mmdb):
+    def __init__(self, mmdb, extra_coll=None):
         self.search_url = "http://dblp.uni-trier.de/search/author?xauthor="
         self.person_url = "http://dblp.uni-trier.de/pers/xx/"
         self.collaborators_url = "http://dblp.uni-trier.de/pers/xc/"
         self.person_url_human = "http://dblp.uni-trier.de/pers/hd/"
+        if extra_coll is None:
+            self.extra_collabs = dict()
+        else:
+            self.extra_collabs = importlib.import_module(extra_coll).extra_collabs
+        self.extra_collabs_urls = set(sum(self.extra_collabs.values(), []))
         self.db = open_database(mmdb)
         self.max_cache = 10000
         self.cache = dict()
@@ -96,39 +102,49 @@ class DBLPHandler(object):
                     "name": a.text,
                     "url": a.get("urlpt")
                 })
+            if who in self.extra_collabs:
+                for e in self.extra_collabs[who]:
+			        data.append({
+                        "name": e,
+                        "url": e
+                    })
             response.data = json.dumps(data)
         elif environ["PATH_INFO"].startswith("/geolocate"):
             who = environ["PATH_INFO"].split("/")
             if len(who) < 3:
                 return BadRequest()
             who = "/".join(who[2:])
-            if who.startswith(self.person_url_human):
-                who = who[len(self.person_url_human):]
-            try:
-                dwl = self.getpage(self.person_url + who)
-            except urllib2.HTTPError as e:
-                if e.code == 429:
-                    return TooManyRequests()
-                else:
-                    return NotFound()
-            data = ET.fromstring(dwl)
-            if 'f' in data.attrib:
-                who2 = data.attrib.get('f')
+            if who in self.extra_collabs_urls:
+                homepage = who
+            else:
+                if who.startswith(self.person_url_human):
+                    who = who[len(self.person_url_human):]
                 try:
-                    dwl = self.getpage(self.person_url + who2)
+                    dwl = self.getpage(self.person_url + who)
                 except urllib2.HTTPError as e:
                     if e.code == 429:
                         return TooManyRequests()
                     else:
                         return NotFound()
                 data = ET.fromstring(dwl)
-            person_info = data.find("person")
-            homepage = person_info.find("url")
+                if 'f' in data.attrib:
+                    who2 = data.attrib.get('f')
+                    try:
+                        dwl = self.getpage(self.person_url + who2)
+                    except urllib2.HTTPError as e:
+                        if e.code == 429:
+                            return TooManyRequests()
+                        else:
+                            return NotFound()
+                    data = ET.fromstring(dwl)
+                person_info = data.find("person")
+                homepage = person_info.find("url")
+                homepage = homepage.text if homepage is not None else None
             if homepage is None:
                 data = {"url": who}
             else:
                 try:
-                    domain = homepage.text.split("/")[2]
+                    domain = homepage.split("/")[2]
                     ip = self.gethostbyname(domain)
                     info = self.db.lookup(ip)
                     data = {
@@ -146,8 +162,9 @@ class DBLPHandler(object):
 
 if __name__ == '__main__':
     if len(sys.argv) < 4:
-        print >>sys.stderr, "Usage: %s address port geoipDB" % sys.argv[0]
+        print >>sys.stderr, "Usage: %s address port geoipDB [extra_collabs]" % sys.argv[0]
     address = sys.argv[1]
     port = int(sys.argv[2])
-    wsgi_app = SharedDataMiddleware(DBLPHandler(sys.argv[3]), {'/': 'web'})
+    extra_collabs = None if len(sys.argv) == 4 else sys.argv[4]
+    wsgi_app = SharedDataMiddleware(DBLPHandler(sys.argv[3], extra_collabs), {'/': 'web'})
     run_simple(address, port, wsgi_app, threaded=True, use_debugger=True)
