@@ -21,3 +21,16 @@
     height: 30px;
     width: 30px;
 }
+
+#map > div > div > div:nth-child(1) > div:nth-child(1) > div:nth-child(4) > div > div > div > div {
+    height: 20px;
+    border: 1px solid #eb3a44;
+    border-radius: 5px;
+    background: #fee1d7;
+    text-align: center;
+    line-height: 20px;
+    font-weight: bold;
+    font-size: 14px;
+    color: #eb3a44;
+    z-index: 1000 !important;
+}
