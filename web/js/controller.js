@@ -10,8 +10,9 @@ DBLPApp.controller('DBLPCtrl', function ($scope, $http) {
     $scope.collaboratorsStatus = 200;
     $scope.mapWidth = 0;
     $scope.mapHeight = 0;
+    $scope.accumulate = false;
     $scope.search = function() {
-        $http.get("/search/" + encodeURIComponent($scope.who), {})
+        $http.get("search/" + encodeURIComponent($scope.who), {})
             .then(function success(response) {
                 $scope.searchResults = response.data;
                 $scope.searchStatus = response.status;
@@ -24,14 +25,14 @@ DBLPApp.controller('DBLPCtrl', function ($scope, $http) {
         $scope.url = url;
     }
     $scope.getCollaborators = function() {
-        $http.get("/collaborators/" + encodeURIComponent($scope.url), {})
+        $http.get("collaborators/" + encodeURIComponent($scope.url), {})
             .then(function success(response) {
-                $scope.collaborators = {}
+                if (!$scope.accumulate) $scope.collaborators = {}
                 $scope.collaboratorsStatus = response.status;
                 for (var i=0; i<response.data.length; i++) {
                     $scope.collaborators[response.data[i].url] = response.data[i];
                     $scope.collaborators[response.data[i].url].loading = true;
-                    $http.get("/geolocate/" + encodeURIComponent(response.data[i].url), {})
+                    $http.get("geolocate/" + encodeURIComponent(response.data[i].url), {})
                         .then(function success(response) {
                             $scope.collaborators[response.data.url].loading = false;
                             if ("coords" in response.data)

@@ -50,6 +50,7 @@
             <span class="glyphicon glyphicon-map-marker"></span>
           </button>
         </form>
+        <form class="navbar-form"><label for="accumulate">Accumulate</label><input type="checkbox" ng-model="accumulate" id="accumulate"/></button>
         <div ng-if="collaboratorsStatus != 200" class="alert alert-danger" role="alert">
           <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
           Error {{collaboratorsStatus}} while loading results!

@@ -163,6 +163,7 @@ class DBLPHandler(object):
 if __name__ == '__main__':
     if len(sys.argv) < 4:
         print >>sys.stderr, "Usage: %s address port geoipDB [extra_collabs]" % sys.argv[0]
+        sys.exit(1)
     address = sys.argv[1]
     port = int(sys.argv[2])
     extra_collabs = None if len(sys.argv) == 4 else sys.argv[4]
