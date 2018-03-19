@@ -1,39 +1,40 @@
-#!/usr/bin/env pypy
+#!/usr/bin/env python2
+# pylint: disable=missing-docstring,wrong-import-position
+# pylint: disable=too-many-instance-attributes,invalid-name
+# pylint: disable=too-many-locals,too-many-function-args
+# pylint: disable=too-many-return-statements,too-many-branches
+# pylint: disable=too-many-statements,bare-except
 
-import xml
+from __future__ import print_function
+
+from collections import deque
 import sys
-import gzip
 import xml.etree.ElementTree as ET
-from geoip import open_database
+import json
+import urllib2
+import urllib
+import time
+import traceback
+
 import gevent
 from gevent import monkey
 monkey.patch_all()
-import urllib2
-import urllib
-import json
-import time
-import importlib
-from collections import deque
-from gevent import socket
+
 from werkzeug.utils import redirect
 from werkzeug.wsgi import SharedDataMiddleware, responder
 from werkzeug.serving import run_simple
-from werkzeug.exceptions import HTTPException, NotFound, BadRequest, \
-    InternalServerError, TooManyRequests
+from werkzeug.exceptions import NotFound, BadRequest, TooManyRequests
 from werkzeug.wrappers import Response
+import geoip
+
 
 class DBLPHandler(object):
-    def __init__(self, mmdb, extra_coll=None):
+    def __init__(self, mmdb):
         self.search_url = "http://dblp.uni-trier.de/search/author?xauthor="
         self.person_url = "http://dblp.uni-trier.de/pers/xx/"
         self.collaborators_url = "http://dblp.uni-trier.de/pers/xc/"
         self.person_url_human = "http://dblp.uni-trier.de/pers/hd/"
-        if extra_coll is None:
-            self.extra_collabs = dict()
-        else:
-            self.extra_collabs = importlib.import_module(extra_coll).extra_collabs
-        self.extra_collabs_urls = set(sum(self.extra_collabs.values(), []))
-        self.db = open_database(mmdb)
+        self.db = geoip.open_database(mmdb.encode('utf8'))
         self.max_cache = 10000
         self.cache = dict()
         self.cachelist = deque()
@@ -48,7 +49,7 @@ class DBLPHandler(object):
             self.cachelist.append(url)
             self.cache[url] = page
             if len(self.cache) > self.max_cache:
-                del self.cache[self.cachelist.popleft(0)]
+                del self.cache[self.cachelist.popleft()]
         return self.cache[url]
 
     def gethostbyname(self, host):
@@ -71,15 +72,12 @@ class DBLPHandler(object):
             what = environ["PATH_INFO"].split("/")
             if len(what) != 3:
                 return BadRequest()
-            what = urllib.quote(what[2])
+            what = urllib.parse.quote(what[2])
             dwl = self.getpage(self.search_url + what)
             authors = ET.fromstring(dwl)
             data = []
             for a in authors:
-                data.append({
-                    "name": a.text,
-                    "url": a.get("urlpt")
-                })
+                data.append({"name": a.text, "url": a.get("urlpt")})
             response.data = json.dumps(data)
         elif environ["PATH_INFO"].startswith("/collaborators"):
             who = environ["PATH_INFO"].split("/")
@@ -93,53 +91,38 @@ class DBLPHandler(object):
             except urllib2.HTTPError as e:
                 if e.code == 429:
                     return TooManyRequests()
-                else:
-                    return NotFound()
+                return NotFound()
             authors = ET.fromstring(dwl)
             data = []
             for a in authors:
-                data.append({
-                    "name": a.text,
-                    "url": a.get("urlpt")
-                })
-            if who in self.extra_collabs:
-                for e in self.extra_collabs[who]:
-			        data.append({
-                        "name": e,
-                        "url": e
-                    })
+                data.append({"name": a.text, "url": a.get("urlpt")})
             response.data = json.dumps(data)
         elif environ["PATH_INFO"].startswith("/geolocate"):
             who = environ["PATH_INFO"].split("/")
             if len(who) < 3:
                 return BadRequest()
             who = "/".join(who[2:])
-            if who in self.extra_collabs_urls:
-                homepage = who
-            else:
-                if who.startswith(self.person_url_human):
-                    who = who[len(self.person_url_human):]
+            if who.startswith(self.person_url_human):
+                who = who[len(self.person_url_human):]
+            try:
+                dwl = self.getpage(self.person_url + who)
+            except urllib2.HTTPError as e:
+                if e.code == 429:
+                    return TooManyRequests()
+                return NotFound()
+            data = ET.fromstring(dwl)
+            if 'f' in data.attrib:
+                who2 = data.attrib.get('f')
                 try:
-                    dwl = self.getpage(self.person_url + who)
+                    dwl = self.getpage(self.person_url + who2)
                 except urllib2.HTTPError as e:
                     if e.code == 429:
                         return TooManyRequests()
-                    else:
-                        return NotFound()
+                    return NotFound()
                 data = ET.fromstring(dwl)
-                if 'f' in data.attrib:
-                    who2 = data.attrib.get('f')
-                    try:
-                        dwl = self.getpage(self.person_url + who2)
-                    except urllib2.HTTPError as e:
-                        if e.code == 429:
-                            return TooManyRequests()
-                        else:
-                            return NotFound()
-                    data = ET.fromstring(dwl)
-                person_info = data.find("person")
-                homepage = person_info.find("url")
-                homepage = homepage.text if homepage is not None else None
+            person_info = data.find("person")
+            homepage = person_info.find("url")
+            homepage = homepage.text if homepage is not None else None
             if homepage is None:
                 data = {"url": who}
             else:
@@ -154,18 +137,19 @@ class DBLPHandler(object):
                         "coords": info.location
                     }
                 except:
+                    traceback.print_exc()
                     data = {"url": who}
             response.data = json.dumps(data)
         else:
             return BadRequest()
         return response
 
+
 if __name__ == '__main__':
     if len(sys.argv) < 4:
-        print >>sys.stderr, "Usage: %s address port geoipDB [extra_collabs]" % sys.argv[0]
+        print("Usage: %s address port geoipDB" % sys.argv[0], file=sys.stderr)
         sys.exit(1)
     address = sys.argv[1]
     port = int(sys.argv[2])
-    extra_collabs = None if len(sys.argv) == 4 else sys.argv[4]
-    wsgi_app = SharedDataMiddleware(DBLPHandler(sys.argv[3], extra_collabs), {'/': 'web'})
+    wsgi_app = SharedDataMiddleware(DBLPHandler(sys.argv[3]), {'/': 'web'})
     run_simple(address, port, wsgi_app, threaded=True, use_debugger=True)
