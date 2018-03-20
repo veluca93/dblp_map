@@ -120,6 +120,7 @@ class DBLPHandler(object):
             who_human = who_human.replace('=uacute=', 'u')
             who_human = who_human.replace('=ntilde=', 'n')
             who_human = who_human.replace('=oslash=', 'o')
+            who_human = who_human.replace('=uuml=', 'u')
             res = self.do_google_query(who_human)
             for url in [x.get('link') for x in res.get('items')]:
                 if self.is_accademic(urlparse.urlparse(url).netloc):
