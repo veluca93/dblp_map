@@ -107,6 +107,19 @@ class DBLPHandler(object):
             return None
         if who not in self.google_cache:
             who_human = who.split('/')[1].replace(':', ' ')
+            who_human = who_human.replace('_', ' ')
+            who_human = who_human.replace('=agrave=', 'a')
+            who_human = who_human.replace('=aacute=', 'a')
+            who_human = who_human.replace('=egrave=', 'e')
+            who_human = who_human.replace('=eacute=', 'e')
+            who_human = who_human.replace('=igrave=', 'i')
+            who_human = who_human.replace('=iacute=', 'i')
+            who_human = who_human.replace('=ograve=', 'o')
+            who_human = who_human.replace('=oacute=', 'o')
+            who_human = who_human.replace('=ugrave=', 'u')
+            who_human = who_human.replace('=uacute=', 'u')
+            who_human = who_human.replace('=ntilde=', 'n')
+            who_human = who_human.replace('=oslash=', 'o')
             res = self.do_google_query(who_human)
             for url in [x.get('link') for x in res.get('items')]:
                 if self.is_accademic(urlparse.urlparse(url).netloc):
