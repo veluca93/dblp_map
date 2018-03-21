@@ -64,21 +64,36 @@ DBLPApp.controller('DBLPCtrl', function ($scope, $http) {
           mapTypeId: google.maps.MapTypeId.ROADMAP
         });
         map.fitBounds(bounds);
-        var infowindow = new google.maps.InfoWindow();
-        var markers = locations.map(function(location) { 
-          return new google.maps.Marker({
-            position: new google.maps.LatLng(location[1]+0.1*Math.random()-0.05, location[2]+0.1*Math.random()-0.05),
-            map: map,
-            label: {
-                text: location[0],
-                color: '#eb3a44',
-                fontSize: "16px",
-                fontWeight: "bold",
+        if ($scope.cluster) {
+            var markers = locations.map(function(location) { 
+              return new google.maps.Marker({
+                position: new google.maps.LatLng(location[1]+0.1*Math.random()-0.05, location[2]+0.1*Math.random()-0.05),
+                map: map,
+                label: {
+                    text: location[0],
+                    color: '#eb3a44',
+                    fontSize: "16px",
+                    fontWeight: "bold",
+                }
+              });
+            });
+            var markerCluster = new MarkerClusterer(map, markers,
+                                {imagePath: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m', gridSize: 30});
+        } else {
+            var infowindow = new google.maps.InfoWindow();
+            for (var i = 0; i < locations.length; i++) {
+              var marker = new google.maps.Marker({
+                position: new google.maps.LatLng(locations[i][1]+0.1*Math.random()-0.05, locations[i][2]+0.1*Math.random()-0.05),
+                map: map
+              });
+              google.maps.event.addListener(marker, 'click', (function(marker, i) {
+                return function() {
+                  infowindow.setContent(locations[i][0]);
+                  infowindow.open(map, marker);
+                }
+              })(marker, i));
             }
-          });
-        });
-        var markerCluster = new MarkerClusterer(map, markers,
-                            {imagePath: 'https://developers.google.com/maps/documentation/javascript/examples/markerclusterer/m', gridSize: 30});
+        }
         $scope.mapWidth = document.getElementById('map').parentNode.offsetWidth;
         $scope.mapHeight = $scope.mapWidth*3/4;
     }
