@@ -120,6 +120,10 @@ class DBLPHandler(object):
             who_human = who_human.replace('=uacute=', 'u')
             who_human = who_human.replace('=ntilde=', 'n')
             who_human = who_human.replace('=oslash=', 'o')
+            who_human = who_human.replace('=auml=', 'a')
+            who_human = who_human.replace('=euml=', 'e')
+            who_human = who_human.replace('=iuml=', 'i')
+            who_human = who_human.replace('=ouml=', 'o')
             who_human = who_human.replace('=uuml=', 'u')
             res = self.do_google_query(who_human)
             for url in [x.get('link') for x in res.get('items')]:
