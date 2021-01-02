@@ -1,12 +1,10 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
 # pylint: disable=missing-docstring,wrong-import-position
 # pylint: disable=too-many-instance-attributes,invalid-name
 # pylint: disable=too-many-locals,too-many-function-args
 # pylint: disable=too-many-return-statements,too-many-branches
 # pylint: disable=too-many-statements,bare-except
 # pylint: disable=bad-continuation
-
-from __future__ import print_function
 
 from collections import deque
 import errno
@@ -15,9 +13,9 @@ import pickle
 import sys
 import xml.etree.ElementTree as ET
 import json
-import urllib2
-import urllib
-import urlparse
+import urllib.request
+import urllib.error
+import urllib.parse
 import time
 import traceback
 
@@ -26,13 +24,14 @@ from gevent import monkey
 monkey.patch_all()
 
 from werkzeug.utils import redirect
-from werkzeug.wsgi import SharedDataMiddleware, responder
+from werkzeug.middleware.shared_data import SharedDataMiddleware
+from werkzeug.wsgi import responder
 from werkzeug.serving import run_simple
 from werkzeug.exceptions import NotFound, BadRequest, TooManyRequests
 from werkzeug.wrappers import Response
 from googleapiclient.discovery import build
 
-import geoip
+import geoip2.database
 
 
 class DBLPHandler(object):
@@ -41,7 +40,7 @@ class DBLPHandler(object):
         self.person_url = "http://dblp.uni-trier.de/pers/xx/"
         self.collaborators_url = "http://dblp.uni-trier.de/pers/xc/"
         self.person_url_human = "http://dblp.uni-trier.de/pers/hd/"
-        self.db = geoip.open_database(mmdb.encode('utf8'))
+        self.db = geoip2.database.Reader(mmdb)
         self.max_cache = 10000
         self.cache = dict()
         self.cachelist = deque()
@@ -51,9 +50,8 @@ class DBLPHandler(object):
         if self.google_api_key is not None:
             self.google_cache = dict()
             with open(
-                    os.path.join(
-                        os.path.dirname(os.path.abspath(__file__)),
-                        "accademic_websites.txt")) as f:
+                    os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "accademic_websites.txt")) as f:
                 self.accademic_websites = set()
                 for aw in f:
                     website = aw.strip()
@@ -66,7 +64,7 @@ class DBLPHandler(object):
             while time.time() < self.lastPageLoad + 0.1:
                 gevent.sleep(0.01)
             self.lastPageLoad = time.time()
-            opener = urllib2.build_opener()
+            opener = urllib.request.build_opener()
             opener.addheaders = [('User-Agent', 'Mozilla/5.0')]
             page = opener.open(url).read()
             self.cachelist.append(url)
@@ -87,15 +85,16 @@ class DBLPHandler(object):
 
     def do_google_query(self, who):
         cachedir = os.path.join(os.path.dirname(__file__), 'google_cache')
-        cachefile = os.path.join(cachedir, urllib.quote(who))
+        cachefile = os.path.join(cachedir, urllib.parse.quote(who))
         if not os.path.exists(cachefile):
             try:
                 os.makedirs(cachedir)
             except OSError as e:
                 if e.errno != errno.EEXIST:
                     raise
-            service = build(
-                "customsearch", "v1", developerKey=self.google_api_key)
+            service = build("customsearch",
+                            "v1",
+                            developerKey=self.google_api_key)
             res = service.cse().list(q=who, cx=self.google_cs_id).execute()
             with open(cachefile, 'wb') as f:
                 pickle.dump(res, f, pickle.HIGHEST_PROTOCOL)
@@ -127,7 +126,7 @@ class DBLPHandler(object):
             who_human = who_human.replace('=uuml=', 'u')
             res = self.do_google_query(who_human)
             for url in [x.get('link') for x in res.get('items')]:
-                if self.is_accademic(urlparse.urlparse(url).netloc):
+                if self.is_accademic(urllib.parse.urlparse(url).netloc):
                     self.google_cache[who] = url
                     break
             if who not in self.google_cache:
@@ -154,7 +153,7 @@ class DBLPHandler(object):
             what = environ["PATH_INFO"].split("/")
             if len(what) != 3:
                 return BadRequest()
-            what = urllib.quote(what[2])
+            what = urllib.parse.quote(what[2])
             dwl = self.getpage(self.search_url + what)
             authors = ET.fromstring(dwl)
             data = []
@@ -170,7 +169,7 @@ class DBLPHandler(object):
                 who = who[len(self.person_url_human):]
             try:
                 dwl = self.getpage(self.collaborators_url + who)
-            except urllib2.HTTPError as e:
+            except urllib.error.HTTPError as e:
                 if e.code == 429:
                     return TooManyRequests()
                 return NotFound()
@@ -188,7 +187,7 @@ class DBLPHandler(object):
                 who = who[len(self.person_url_human):]
             try:
                 dwl = self.getpage(self.person_url + who)
-            except urllib2.HTTPError as e:
+            except urllib.error.HTTPError as e:
                 if e.code == 429:
                     return TooManyRequests()
                 return NotFound()
@@ -198,7 +197,7 @@ class DBLPHandler(object):
                 print(who2)
                 try:
                     dwl = self.getpage(self.person_url + who2)
-                except urllib2.HTTPError as e:
+                except urllib.error.HTTPError as e:
                     if e.code == 429:
                         return TooManyRequests()
                     return NotFound()
@@ -214,12 +213,12 @@ class DBLPHandler(object):
                 try:
                     domain = homepage.split("/")[2]
                     ip = self.gethostbyname(domain)
-                    info = self.db.lookup(ip)
+                    info = self.db.city(ip)
                     data = {
                         "url": who,
-                        "country": info.country,
-                        "subdivisions": list(info.subdivisions),
-                        "coords": info.location
+                        "country": info.country.name,
+                        "coords":
+                        (info.location.latitude, info.location.longitude)
                     }
                 except:
                     traceback.print_exc()
